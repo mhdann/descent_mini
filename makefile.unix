@@ -18,7 +18,9 @@ O := BUILD
 
 DEFS   := -dNETWORK -dRELEASE -dNDEBUG
 INCS   := -i=lib -i=includes -i=main -i=$(WATCOM)/h
-CFLAGS := -zq -mf -3r -ox -wcd=107 $(DEFS) $(INCS)
+# -zp1: byte-packed structs, matching the original Watcom build; the game
+# reads disk formats (PIG/HOG/savegames) directly into structs.
+CFLAGS := -zq -mf -3r -ox -zp1 -wcd=107 $(DEFS) $(INCS)
 AFLAGS := -q -DNDEBUG=1 -Iincludes -Ilib
 
 # ---------------------------------------------------------------- lib specs
