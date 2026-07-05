@@ -1,0 +1,139 @@
+# GNU Makefile to cross-compile Descent 1 (DOS) on macOS/Linux
+# using the Open Watcom v2 toolchain + JWasm.
+#
+#   make -f makefile.unix -j8
+#
+# Produces BUILD/descentr.exe (32-bit DOS4GW executable, run in DOSBox).
+
+WATCOM ?= $(HOME)/opt/watcom
+export WATCOM
+HOSTBIN ?= $(WATCOM)/armo64
+
+CC := $(HOSTBIN)/wcc386
+AS := $(HOSTBIN)/jwasm
+AR := $(HOSTBIN)/wlib
+LD := $(HOSTBIN)/wlink
+
+O := BUILD
+
+DEFS   := -dNETWORK -dRELEASE -dNDEBUG
+INCS   := -i=lib -i=includes -i=main -i=$(WATCOM)/h
+CFLAGS := -zq -mf -3r -ox -wcd=107 $(DEFS) $(INCS)
+AFLAGS := -q -DNDEBUG=1 -Iincludes -Ilib
+
+# ---------------------------------------------------------------- lib specs
+# lib name -> source dir + objects
+GR_DIR      := 2d
+GR_OBJS     := linear vesa modex canvas bitmap gr font bitblt scanline pixel \
+               poly disc rect box gpixel palette line lbitblt scale scalea \
+               circle ibitblt rle pcx
+
+IO_DIR      := bios
+IO_OBJS     := key joy mouse timer mono joyc dpmi ipx
+
+FIX_DIR     := fix
+FIX_OBJS    := fix
+
+CFILE_DIR   := cfile
+CFILE_OBJS  := cfile
+
+IFF_DIR     := iff
+IFF_OBJS    := iff
+
+DIV0_DIR    := div
+DIV0_OBJS   := div0
+
+MEM_DIR     := mem
+MEM_OBJS    := mem
+
+MISC_DIR    := misc
+MISC_OBJS   := parsarg error
+
+VECMAT_DIR  := vecmat
+VECMAT_OBJS := vecmat
+
+3D_DIR      := 3d
+3D_OBJS     := globvars setup matrix points draw clipper horizon instance rod interp
+
+TEXMAP_DIR  := texmap
+TEXMAP_OBJS := ntmap tmapflat tmap_per tmap_lin tmap_ll tmap_flt tmapfade tmap_fl1
+
+UI_DIR      := ui
+UI_OBJS     := ui mouse window uidraw button gadget listbox message popup \
+               scroll radio checkbox inputbox userbox menu harderr file \
+               keytrap icon keypress menubar keypad
+
+EDITOR_DIR  := main/editor
+EDITOR_OBJS := med einit eglobal mine curves kcurve khelp ksegsel kbuild kview \
+               kmine seguvs ksegsize ksegmove ktmap kfuncs autosave group \
+               texture fixseg eobject elight texpage objpage medmisc medsel \
+               kgame info medwall eswitch medrobot meddraw segment ehostage \
+               centers func
+
+# editor.lib omitted: editor sources require -dEDITOR, which changes struct
+# layouts game-wide (see readme.txt); the release game never references it.
+LIBS := gr io fix cfile iff div0 mem misc vecmat 3d texmap ui
+
+# ---------------------------------------------------------------- main exe
+MAIN_OBJS := inferno game gauges mglobal scores object laser physics bm menu \
+             gamesave switch effects texmerge polyobj gamemine fireball ai \
+             aipath hostage powerup fuelcen digi render hash piggy args \
+             gameseg wall collide lighting robot morph vclip weapon fvi \
+             newdemo titles vfx gameseq controls automap text network newmenu \
+             netmisc victor gamefont joydefs hud playsave endlevel terrain \
+             kconfig modem multi cntrlcen credits config soscodec kmatrix \
+             paging mission iglasses songs bmread state multibot nocomlib \
+             slew dumpmine
+
+# ---------------------------------------------------------------- rules
+define LIBRULES
+# $(1)=libname $(2)=srcdir-var-prefix
+$(O)/$(1)/%.obj: $($(2)_DIR)/%.c | $(O)/$(1)
+	$(CC) $(CFLAGS) -fo=$$@ $$<
+$(O)/$(1)/%.obj: $($(2)_DIR)/%.asm | $(O)/$(1)
+	$(AS) $(AFLAGS) -I$($(2)_DIR) -Fo$$@ $$<
+$(O)/$(1).lib: $(patsubst %,$(O)/$(1)/%.obj,$($(2)_OBJS))
+	rm -f $$@
+	$(AR) -q -n $$@ $$(patsubst %,+%,$$^)
+$(O)/$(1):
+	mkdir -p $$@
+endef
+
+$(eval $(call LIBRULES,gr,GR))
+$(eval $(call LIBRULES,io,IO))
+$(eval $(call LIBRULES,fix,FIX))
+$(eval $(call LIBRULES,cfile,CFILE))
+$(eval $(call LIBRULES,iff,IFF))
+$(eval $(call LIBRULES,div0,DIV0))
+$(eval $(call LIBRULES,mem,MEM))
+$(eval $(call LIBRULES,misc,MISC))
+$(eval $(call LIBRULES,vecmat,VECMAT))
+$(eval $(call LIBRULES,3d,3D))
+$(eval $(call LIBRULES,texmap,TEXMAP))
+$(eval $(call LIBRULES,ui,UI))
+$(eval $(call LIBRULES,editor,EDITOR))
+
+# main
+$(O)/main/%.obj: main/%.c | $(O)/main
+	$(CC) $(CFLAGS) -fo=$@ $<
+$(O)/main/%.obj: main/%.asm | $(O)/main
+	$(AS) $(AFLAGS) -Imain -Fo$@ $<
+$(O)/main:
+	mkdir -p $@
+
+LIBFILES  := $(patsubst %,$(O)/%.lib,$(LIBS))
+MAINOBJFILES := $(patsubst %,$(O)/main/%.obj,$(MAIN_OBJS))
+
+$(O)/descentr.exe: $(MAINOBJFILES) $(LIBFILES)
+	$(LD) @$(HOSTBIN)/wlink.lnk option quiet name $@ system dos4g \
+		option stub=$(WATCOM)/binw/wstub.exe option stack=50000 \
+		$(patsubst %,file %,$(MAINOBJFILES)) \
+		$(patsubst %,library %,$(LIBFILES))
+
+.PHONY: all clean
+all: $(O)/descentr.exe
+
+.DEFAULT_GOAL := all
+
+clean:
+	rm -rf $(O)
